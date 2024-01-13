@@ -4,6 +4,7 @@ pub mod data;
 pub mod images;
 pub mod math;
 pub mod numbers;
+pub mod schizo;
 
 pub struct Noop;
 
@@ -23,22 +24,23 @@ fn split_off_last_word(s: &mut String) -> String {
 pub mod numbers1 {
     use std::collections::HashMap;
 
+    use num::BigUint;
+
     use crate::{bytes::*, data, numbers::*};
 
-    pub const NUMBER: u128 = 572943;
-    pub fn calc(num: u128) -> String {
+    pub fn calc(num: BigUint) -> String {
         let ret = apply_num_op(
-            num,
-            prepend_digits(2u128)
-                .chain(append_digits(9))
-                .chain(append_digits(1))
-                .chain(multiply(5))
-                .chain(append_digits(6))
+            num.clone(),
+            prepend_digits(BigUint::from(2u8))
+                .chain(append_digits(9u8.into()))
+                .chain(append_digits(1u8.into()))
+                .chain(multiply(5u8.into()))
+                .chain(append_digits(6u8.into()))
                 .chain(flip_digits())
                 .chain(replace_digit(2, 3))
-                .chain(multiply(9))
-                .chain(append_digits(24))
-                .chain(prepend_digits(17)),
+                .chain(multiply(9u8.into()))
+                .chain(append_digits(24u8.into()))
+                .chain(prepend_digits(17u8.into())),
         );
         let mut map = HashMap::new();
         for (a, b) in num
@@ -47,9 +49,12 @@ pub mod numbers1 {
             .zip(std::iter::successors(Some('a'), |x| {
                 char::from_u32(*x as u32 + 1)
             }))
+            .take(6)
         {
-            map.entry(a).or_insert(b);
+            map.insert(a, b);
+            // map.entry(a).or_insert(b);
         }
+        // println!("{}", ret.clone().to_string());
         ret.to_string()
             .chars()
             .map(|x| map.get(&x).copied().unwrap_or(x))
@@ -59,7 +64,7 @@ pub mod numbers1 {
     pub fn answer() -> String {
         process_string(
             data::NUMBERS_BASE64,
-            base64().chain(decrypt_with(calc(NUMBER))),
+            base64().chain(decrypt_with(calc(data::NUMBER.into()))),
         )
     }
 }
@@ -70,7 +75,7 @@ pub mod study {
     pub fn phone() -> String {
         process_string(
             data::STUDY_BASE64,
-            base64().chain(decrypt_with(numbers1::calc(numbers1::NUMBER))),
+            base64().chain(decrypt_with(numbers1::calc(data::NUMBER.into()))),
         )
     }
 
@@ -108,6 +113,7 @@ pub mod numbers2 {
         )[..16];
         let mut ret = process_string(stage1().1, base64().chain(decrypt_with(key)));
         let cipher = split_off_last_word(&mut ret);
+        eprintln!("{cipher}");
         (ret, cipher)
     }
 
@@ -191,20 +197,12 @@ pub mod filtered {
 
 /// KEY = 128bit
 mod meaning_of_life {
-    use crate::{bytes::*, data, images};
+    use crate::{bytes::*, data, images, schizo};
 
     pub fn hex() -> String {
         data::MEANING_OF_LIFE_BINARY
             .split_whitespace()
             .map(|x| u8::from_str_radix(x, 2).unwrap() as char)
-            .collect()
-    }
-
-    pub fn hex_to_bytes(s: &str) -> Vec<u8> {
-        s.as_bytes()
-            .chunks_exact(2)
-            .map(|x| std::str::from_utf8(x).unwrap())
-            .map(|x| u8::from_str_radix(x, 16).unwrap())
             .collect()
     }
 
@@ -214,24 +212,59 @@ mod meaning_of_life {
     }
 
     #[allow(unused)]
+    pub fn schizo() {
+        // !!!
+        for num in schizo::reverse_numbers(&hex()) {
+            println!("{num}");
+        }
+    }
+
+    #[allow(unused)]
     pub fn answer() -> Vec<u8> {
         let cipher = data::MEANING_OF_LIFE_BASE64;
         let hex = hex();
-        let hex_bytes = hex_to_bytes(&hex);
+        let hex_bytes = schizo::hex_to_bytes(&hex);
         let num = data::MEANING_OF_LIFE_NUM;
         let str = data::MEANING_OF_LIFE_STR;
+        /* 692048501258949201
+         * 99aa671fce19251
+         * 46325147077470311121
+         * 692048501258949201
+         * c75e0fb05eec877fc8522e550df55ded5b50508fbbe88bb7d82e28d8f2df0e2b
+         * 201 1321 5831 723 743 4913 879 875 2145 716 906 4156
+         * bb ce td ht eft ggd sgfi dqj ie br vtye b sbs
+         * 22 23 83 48 338 443 7434 375 43 27 8893 2 727
+         * bbc etd hte ftg gds gfi dqj ieb rvt yeb sbs
+         * 34558 6109 419 177
+         */
+        for w in super::filtered::Shift::new("bbc etd hte ftg gds gfi dqj ieb rvt yeb sbs") {
+            println!("{w}");
+        }
         panic!(
             "{:?}",
             base64()
-                .chain(decrypt_with(&hex_bytes[16..]))
+                .chain(decrypt_with("1416938177140585"))
                 .process(cipher.as_bytes())
         )
     }
 }
 
 fn main() {
-    filtered::denoise_image();
+    for n in data::NUMBERS2.into_iter().flatten() {
+        println!("{n} {}", numbers1::calc(n.into()));
+    }
+    //println!("{}", numbers1::calc(1416938177140558u64.into()));
+    //panic!();
+    // a758eeb757d82e28d8f2df0e2b
+    // filtered::denoise_image();
+    // 175fbfbf757f7bce
+    let hex = "c75e0fb05eec877fc8522e550df55ded5b50508fbbe88bb7d82e28d8f2df0e2b";
+    for num in schizo::reverse_numbers(&hex) {
+        println!("{num}, {}", numbers1::calc(num.clone()));
+    }
+    //println!("{}", numbers1::calc(692048u32.into()));
     // println!("{:?}", meaning_of_life::answer());
+    // println!("{:?}", meaning_of_life::reassemble_image());
 }
 
 #[cfg(test)]
@@ -246,5 +279,6 @@ mod test {
         numbers2::all_stages();
         soundcloud::answer();
         filtered::answer();
+        panic!()
     }
 }

@@ -79,7 +79,7 @@ pub fn filtered_denoise(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
     {
         let rot = row
             .windows(75)
-            .map(|v| v.iter().filter(|x| **x >= 128).count().abs_diff(15))
+            .map(|v| v.iter().filter(|x| **x > 128).count().abs_diff(15))
             .enumerate()
             .max_by_key(|(_, v)| *v)
             .unwrap()

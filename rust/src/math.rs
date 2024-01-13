@@ -21,10 +21,10 @@ impl<N: AddAssign + Clone + Num> Iterator for Fibonacci<N> {
     fn next(&mut self) -> Option<Self::Item> {
         if self.2 {
             self.2 = false;
-            return Some(self.1.clone());
+        } else {
+            self.0 += self.1.clone();
+            std::mem::swap(&mut self.0, &mut self.1);
         }
-        self.0 += self.1.clone();
-        std::mem::swap(&mut self.0, &mut self.1);
         Some(self.1.clone())
     }
 }

@@ -77,6 +77,7 @@ pub mod pkcs7 {
 
 pub fn decrypt_aes(data: &[u8], key: &[u8]) -> Vec<u8> {
     let mut data = data.to_vec();
+    eprintln!("{:?}", String::from_utf8(key.to_vec()));
     match key.len() * 8 {
         128 => decrypt1(Aes128::new_from_slice(key).unwrap(), &mut data),
         192 => decrypt1(Aes192::new_from_slice(key).unwrap(), &mut data),
