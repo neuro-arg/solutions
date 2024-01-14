@@ -48,91 +48,79 @@ impl std::iter::FusedIterator for RevShift {}
 // for meaning of life...
 pub fn reverse_numbers(s: &str) -> Vec<BigUint> {
     let set = HashSet::<char>::from_iter(s.chars());
+    // sanity check: up to 10 digits
     assert!(set.len() <= 10);
+    // sanity check: all are valid hex digits
     assert!(set.iter().copied().all(|x| x.is_ascii_hexdigit()));
-    let _dec = set
-        .iter()
-        .copied()
-        .filter(|x| x.is_ascii_digit())
-        .map(|x| x as u8 - b'0')
-        .collect::<Vec<_>>();
-    let mut hex = set
-        .iter()
-        .copied()
-        .filter(|x| x.is_ascii_alphabetic())
-        .map(|x| x as u8 - b'a' + 10)
-        .collect::<Vec<_>>();
-    let mut missing_dec = (0u8..10u8)
-        .filter(|x| !set.contains(&((b'0' + x) as char)))
-        .collect::<Vec<_>>();
-    let start2 = s[..2].to_owned();
-    let end2 = s[s.len() - 2..].to_owned();
-    let mut map = HashMap::new();
-    for x in 0..10 {
-        map.insert(b'0' + x, x);
-    }
+    // sanity check: the start is 17 or 24 (may be partially replaced with hex)
+    let mut map = (0..10).map(|i| (b'0' + i, i)).collect::<HashMap<_, _>>();
     let mut s = s.to_owned();
-    assert!(start2
+    assert!(s[..2]
+        .to_owned()
         .bytes()
-        .chain(end2.bytes())
+        .chain(s[s.len() - 2..].to_owned().bytes())
         .zip([1, 7, 2, 4])
         .all(|(x, y)| {
             if let Some(w) = map.get(&x) {
                 *w == y
             } else {
                 s = s.replace(x as char, std::str::from_utf8(&[b'0' + y]).unwrap());
-                hex = hex
-                    .clone()
-                    .into_iter()
-                    .filter(|w| *w != x - b'a' + 10)
-                    .collect();
-                missing_dec = missing_dec
-                    .clone()
-                    .into_iter()
-                    .filter(|w| *w != y)
-                    .collect();
                 map.insert(x, y);
                 true
             }
         }));
-    assert_eq!(missing_dec.len(), 3);
+    let set = HashSet::<char>::from_iter(s.chars());
+    // missing decimal digits
+    let missing_digits: Vec<_> = (0u8..10u8)
+        .filter(|x| !set.contains(&((b'0' + x) as char)))
+        .collect();
+    // all hex digits
+    let hex: Vec<_> = set
+        .iter()
+        .filter(|x| x.is_ascii_alphabetic())
+        .map(|x| *x as u8 - b'a' + 10)
+        .collect();
+    // currently this function isn't designed for other cases
+    assert_eq!(missing_digits.len(), hex.len());
     let mut ret = vec![];
     for ks in hex.iter().copied().permutations(hex.len()) {
-        let mut map = map.clone();
         let mut s = s.clone();
-        for (k, v) in ks.into_iter().zip(missing_dec.iter().copied()) {
-            map.insert(k, v);
+        for (k, v) in ks.into_iter().zip(missing_digits.iter().copied()) {
             s = s.replace(
                 (k - 10 + b'a') as char,
                 std::str::from_utf8(&[v + b'0']).unwrap(),
             );
         }
-        if let Some(s) = s.strip_prefix("17").and_then(|s| s.strip_suffix("24")) {
-            let b = BigUint::from_str_radix(s, 10).unwrap();
-            let (div, rem) = num::integer::div_rem(b, 9u8.into());
-            if !rem.is_zero() {
-                continue;
-            }
-            let s = div.to_string().chars().rev().collect::<String>();
-            if let Some(s) = s.strip_suffix('6') {
-                // any 3 may or may not come from a 2
-                for s in s
-                    .chars()
-                    .map(|x| match x {
-                        '3' => Some('2').into_iter().chain(Some('3')),
-                        '2' => None.into_iter().chain(None),
-                        x => Some(x).into_iter().chain(None),
-                    })
-                    .multi_cartesian_product()
-                    .map(|x| x.into_iter().collect::<String>())
-                {
-                    let b = BigUint::from_str_radix(&s, 10).unwrap();
-                    let (div, rem) = num::integer::div_rem(b, 5u8.into());
-                    if !rem.is_zero() {
-                        continue;
-                    }
-                    let s = div.to_string();
-                    if let Some(s) = s.strip_suffix("91").and_then(|s| s.strip_prefix('2')) {
+        if let Some(s) = s
+            .strip_prefix("17")
+            .and_then(|s| s.strip_suffix("24"))
+            .and_then(|s| {
+                let b = BigUint::from_str_radix(s, 10).unwrap();
+                let (div, rem) = num::integer::div_rem(b, 9u8.into());
+                rem.is_zero().then_some(div)
+            })
+            .map(|num| num.to_string().chars().rev().collect::<String>())
+            .and_then(|s| s.strip_suffix('6').map(ToOwned::to_owned))
+        {
+            // any 3 may or may not come from a 2
+            for s in s
+                .chars()
+                .map(|x| match x {
+                    '3' => Some('2').into_iter().chain(Some('3')),
+                    '2' => None.into_iter().chain(None),
+                    x => Some(x).into_iter().chain(None),
+                })
+                .multi_cartesian_product()
+                .map(|x| x.into_iter().collect::<String>())
+            {
+                let b = BigUint::from_str_radix(&s, 10).unwrap();
+                let (div, rem) = num::integer::div_rem(b, 5u8.into());
+                if rem.is_zero() {
+                    if let Some(s) = div
+                        .to_string()
+                        .strip_suffix("91")
+                        .and_then(|s| s.strip_prefix('2'))
+                    {
                         ret.push(BigUint::from_str_radix(s, 10).unwrap());
                     }
                 }

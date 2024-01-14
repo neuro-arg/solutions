@@ -21,6 +21,12 @@ pub trait NumOp<N> {
     }
 }
 
+impl<N, T: FnMut(N) -> N> NumOp<N> for T {
+    fn apply(&mut self, num: N) -> N {
+        self(num)
+    }
+}
+
 impl<N> NumOp<N> for Noop {
     fn apply(&mut self, num: N) -> N {
         num

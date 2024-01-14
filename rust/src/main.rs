@@ -1,3 +1,5 @@
+use crate::bytes::{Cipher, process_string};
+
 // two small combinator libraries for processing data and numbers
 pub mod bytes;
 pub mod data;
@@ -236,8 +238,9 @@ mod meaning_of_life {
          * 22 23 83 48 338 443 7434 375 43 27 8893 2 727
          * bbc etd hte ftg gds gfi dqj ieb rvt yeb sbs
          * 34558 6109 419 177
+         * 1416938177140W6W13234W0996W8W54119196W770W7949581998XW
          */
-        for w in super::filtered::Shift::new("bbc etd hte ftg gds gfi dqj ieb rvt yeb sbs") {
+        for w in super::filtered::Shift::new("bb ce td ht eft ggd sgfi dqj ie br vtye b sbs") {
             println!("{w}");
         }
         panic!(
@@ -250,17 +253,23 @@ mod meaning_of_life {
 }
 
 fn main() {
-    for n in data::NUMBERS2.into_iter().flatten() {
+    //println!("{}", numbers1::calc(data::MEANING_OF_LIFE_NUM.into()));
+    /*for n in data::NUMBERS2.into_iter().flatten() {
         println!("{n} {}", numbers1::calc(n.into()));
-    }
+    }*/
+    //return;
     //println!("{}", numbers1::calc(1416938177140558u64.into()));
     //panic!();
     // a758eeb757d82e28d8f2df0e2b
     // filtered::denoise_image();
     // 175fbfbf757f7bce
     let hex = "c75e0fb05eec877fc8522e550df55ded5b50508fbbe88bb7d82e28d8f2df0e2b";
-    for num in schizo::reverse_numbers(&hex) {
-        println!("{num}, {}", numbers1::calc(num.clone()));
+    for num in schizo::reverse_numbers(hex) {
+        let a = num.to_string();
+        let b = process_string(&a, bytes::fuzzy_replace(b"692048501258949201", b"", false));
+        if a != b {
+            println!("a {b}");
+        }
     }
     //println!("{}", numbers1::calc(692048u32.into()));
     // println!("{:?}", meaning_of_life::answer());
