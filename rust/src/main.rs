@@ -1,4 +1,4 @@
-use crate::bytes::{Cipher, process_string};
+use crate::bytes::{process_string, Cipher};
 
 // two small combinator libraries for processing data and numbers
 pub mod bytes;
@@ -68,6 +68,7 @@ pub mod numbers1 {
             data::NUMBERS_BASE64,
             base64().chain(decrypt_with(calc(data::NUMBER.into()))),
         )
+        .unwrap()
     }
 }
 
@@ -79,10 +80,11 @@ pub mod study {
             data::STUDY_BASE64,
             base64().chain(decrypt_with(numbers1::calc(data::NUMBER.into()))),
         )
+        .unwrap()
     }
 
     pub fn malbolge_code() -> String {
-        process_string(data::STUDY_MALBOLGE, malbolge())
+        process_string(data::STUDY_MALBOLGE, malbolge()).unwrap()
     }
 }
 
@@ -93,7 +95,8 @@ pub mod numbers2 {
         let mut ret = process_string(
             data::NUMBERS2_BASE64,
             base64().chain(decrypt_with(data::NUMBERS2_NUEROS)),
-        );
+        )
+        .unwrap();
         let cipher = split_off_last_word(&mut ret);
         (ret, cipher)
     }
@@ -112,15 +115,15 @@ pub mod numbers2 {
                 }
                 op
             },
-        )[..16];
-        let mut ret = process_string(stage1().1, base64().chain(decrypt_with(key)));
+        )
+        .unwrap()[..16];
+        let mut ret = process_string(stage1().1, base64().chain(decrypt_with(key))).unwrap();
         let cipher = split_off_last_word(&mut ret);
-        eprintln!("{cipher}");
         (ret, cipher)
     }
 
     pub fn stage3() -> String {
-        process_string(stage2().1.as_bytes(), malbolge())
+        process_string(stage2().1.as_bytes(), malbolge()).unwrap()
     }
 
     pub fn all_stages() -> (String, String, String) {
@@ -142,7 +145,7 @@ pub mod soundcloud {
             .chars()
             .filter(|x| !x.is_ascii_digit())
             .collect();
-        process_string(data::SOUNDCLOUD_BASE64, base64().chain(decrypt_with(key)))
+        process_string(data::SOUNDCLOUD_BASE64, base64().chain(decrypt_with(key))).unwrap()
     }
 }
 
@@ -189,11 +192,15 @@ pub mod filtered {
     pub fn answer() -> String {
         let code =
             Shift::new(data::FILTERED_TITLE).nth(784).unwrap() + data::FILTERED_GUESSED_CODE_END;
-        assert_eq!(malbolge().process(code.as_bytes()), b"hello world!");
+        assert_eq!(
+            malbolge().process(code.as_bytes()).unwrap(),
+            b"hello world!"
+        );
         process_string(
             data::FILTERED_BASE64,
             base64().chain(decrypt_with(code[code.len() - 16..].as_bytes())),
         )
+        .unwrap()
     }
 }
 
@@ -253,6 +260,27 @@ mod meaning_of_life {
 }
 
 fn main() {
+    println!(
+        "{}",
+        process_string(
+            math::FibonacciDigits::<num::BigUint>::new()
+                .take(10000)
+                .collect::<String>()
+                .as_bytes(),
+            {
+                let mut op = Cipher::chain(Noop, Noop);
+                for nums in data::NUMBERS2 {
+                    let digits: String = nums.map(|x| x.to_string()).into_iter().collect();
+                    op = op.chain(bytes::fuzzy_replace(digits.as_bytes(), &[], true));
+                }
+                for digits in ["692048501", "258949201"] {
+                    op = op.chain(bytes::fuzzy_replace(digits.as_bytes(), &[], true));
+                }
+                op
+            },
+        )
+        .unwrap()
+    );
     //println!("{}", numbers1::calc(data::MEANING_OF_LIFE_NUM.into()));
     /*for n in data::NUMBERS2.into_iter().flatten() {
         println!("{n} {}", numbers1::calc(n.into()));
@@ -263,14 +291,14 @@ fn main() {
     // a758eeb757d82e28d8f2df0e2b
     // filtered::denoise_image();
     // 175fbfbf757f7bce
-    let hex = "c75e0fb05eec877fc8522e550df55ded5b50508fbbe88bb7d82e28d8f2df0e2b";
+    /*let hex = "1bad0fcabc1ebdce";
     for num in schizo::reverse_numbers(hex) {
-        let a = num.to_string();
-        let b = process_string(&a, bytes::fuzzy_replace(b"692048501258949201", b"", false));
-        if a != b {
-            println!("a {b}");
-        }
-    }
+        let a = numbers1::calc(num.clone());
+        // let b = process_string(&a, bytes::fuzzy_replace(b"692048501258949201", b"", false));
+        // if a != b {
+        println!("{num} {a}");
+        // }
+    }*/
     //println!("{}", numbers1::calc(692048u32.into()));
     // println!("{:?}", meaning_of_life::answer());
     // println!("{:?}", meaning_of_life::reassemble_image());
@@ -288,6 +316,5 @@ mod test {
         numbers2::all_stages();
         soundcloud::answer();
         filtered::answer();
-        panic!()
     }
 }

@@ -1,4 +1,4 @@
-use std::collections::{HashMap, HashSet};
+use std::collections::{BTreeSet, HashMap, HashSet};
 
 use itertools::Itertools;
 use num::{BigUint, Num, Zero};
@@ -46,16 +46,20 @@ impl Iterator for RevShift {
 impl std::iter::FusedIterator for RevShift {}
 
 // for meaning of life...
-pub fn reverse_numbers(s: &str) -> Vec<BigUint> {
-    let set = HashSet::<char>::from_iter(s.chars());
+pub fn reverse_numbers(src: &str) -> Vec<BigUint> {
+    let set = HashSet::<char>::from_iter(src.chars());
     // sanity check: up to 10 digits
-    assert!(set.len() <= 10);
+    if set.len() > 10 {
+        return vec![];
+    }
     // sanity check: all are valid hex digits
-    assert!(set.iter().copied().all(|x| x.is_ascii_hexdigit()));
+    if set.iter().copied().any(|x| !x.is_ascii_hexdigit()) {
+        return vec![];
+    }
     // sanity check: the start is 17 or 24 (may be partially replaced with hex)
     let mut map = (0..10).map(|i| (b'0' + i, i)).collect::<HashMap<_, _>>();
-    let mut s = s.to_owned();
-    assert!(s[..2]
+    let mut s = src.to_owned();
+    if !s[..2]
         .to_owned()
         .bytes()
         .chain(s[s.len() - 2..].to_owned().bytes())
@@ -68,7 +72,10 @@ pub fn reverse_numbers(s: &str) -> Vec<BigUint> {
                 map.insert(x, y);
                 true
             }
-        }));
+        })
+    {
+        return vec![];
+    }
     let set = HashSet::<char>::from_iter(s.chars());
     // missing decimal digits
     let missing_digits: Vec<_> = (0u8..10u8)
@@ -80,12 +87,17 @@ pub fn reverse_numbers(s: &str) -> Vec<BigUint> {
         .filter(|x| x.is_ascii_alphabetic())
         .map(|x| *x as u8 - b'a' + 10)
         .collect();
-    // currently this function isn't designed for other cases
-    assert_eq!(missing_digits.len(), hex.len());
+    if missing_digits.len() < hex.len() {
+        return vec![];
+    }
     let mut ret = vec![];
-    for ks in hex.iter().copied().permutations(hex.len()) {
+    for ms in missing_digits
+        .iter()
+        .copied()
+        .permutations(missing_digits.len())
+    {
         let mut s = s.clone();
-        for (k, v) in ks.into_iter().zip(missing_digits.iter().copied()) {
+        for (k, v) in hex.iter().copied().zip(ms.into_iter()) {
             s = s.replace(
                 (k - 10 + b'a') as char,
                 std::str::from_utf8(&[v + b'0']).unwrap(),
@@ -94,16 +106,16 @@ pub fn reverse_numbers(s: &str) -> Vec<BigUint> {
         if let Some(s) = s
             .strip_prefix("17")
             .and_then(|s| s.strip_suffix("24"))
-            .and_then(|s| {
-                let b = BigUint::from_str_radix(s, 10).unwrap();
-                let (div, rem) = num::integer::div_rem(b, 9u8.into());
+            .and_then(|s| BigUint::from_str_radix(s, 10).ok())
+            .and_then(|num| {
+                let (div, rem) = num::integer::div_rem(num, 9u8.into());
                 rem.is_zero().then_some(div)
             })
             .map(|num| num.to_string().chars().rev().collect::<String>())
             .and_then(|s| s.strip_suffix('6').map(ToOwned::to_owned))
         {
             // any 3 may or may not come from a 2
-            for s in s
+            for b in s
                 .chars()
                 .map(|x| match x {
                     '3' => Some('2').into_iter().chain(Some('3')),
@@ -111,21 +123,25 @@ pub fn reverse_numbers(s: &str) -> Vec<BigUint> {
                     x => Some(x).into_iter().chain(None),
                 })
                 .multi_cartesian_product()
-                .map(|x| x.into_iter().collect::<String>())
+                .filter_map(|x| {
+                    BigUint::from_str_radix(&x.into_iter().collect::<String>(), 10).ok()
+                })
             {
-                let b = BigUint::from_str_radix(&s, 10).unwrap();
                 let (div, rem) = num::integer::div_rem(b, 5u8.into());
                 if rem.is_zero() {
-                    if let Some(s) = div
-                        .to_string()
-                        .strip_suffix("91")
-                        .and_then(|s| s.strip_prefix('2'))
-                    {
-                        ret.push(BigUint::from_str_radix(s, 10).unwrap());
-                    }
+                    ret.extend(
+                        div.to_string()
+                            .strip_suffix("91")
+                            .and_then(|s| s.strip_prefix('2'))
+                            .and_then(|s| BigUint::from_str_radix(s, 10).ok()),
+                    );
                 }
             }
         }
     }
-    ret
+    ret.into_iter()
+        .filter(|x| crate::numbers1::calc(x.clone()) == src)
+        .collect::<BTreeSet<_>>()
+        .into_iter()
+        .collect()
 }

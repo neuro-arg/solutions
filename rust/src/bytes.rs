@@ -8,12 +8,14 @@ use base64_crate::Engine;
 
 use crate::Noop;
 
-pub fn process_string<X: AsRef<[u8]>, W: Cipher>(data: X, mut cipher: W) -> String {
-    String::from_utf8(cipher.process(data.as_ref())).unwrap()
+type Result<T> = std::result::Result<T, String>;
+
+pub fn process_string<X: AsRef<[u8]>, W: Cipher>(data: X, mut cipher: W) -> Result<String> {
+    String::from_utf8(cipher.process(data.as_ref())?).map_err(|_| "invalid utf-8 string".to_owned())
 }
 
 pub trait Cipher {
-    fn process(&mut self, data: &[u8]) -> Vec<u8>;
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>>;
     fn chain(self, other: impl 'static + Cipher) -> Chain
     where
         Self: 'static + Sized,
@@ -23,25 +25,25 @@ pub trait Cipher {
 }
 
 impl Cipher for Noop {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
-        data.to_vec()
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
+        Ok(data.to_vec())
     }
 }
 
 impl<T: for<'a> FnMut(&'a [u8]) -> Vec<u8>> Cipher for T {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
-        self(data)
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
+        Ok(self(data))
     }
 }
 
 pub struct Chain(Vec<Box<dyn Cipher>>);
 impl Cipher for Chain {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         let mut data = data.to_vec();
         for cipher in &mut self.0 {
-            data = cipher.process(&data);
+            data = cipher.process(&data)?;
         }
-        data
+        Ok(data)
     }
     fn chain(mut self, other: impl 'static + Cipher) -> Chain
     where
@@ -52,15 +54,18 @@ impl Cipher for Chain {
     }
 }
 
-pub fn decrypt1<C: BlockDecrypt>(crypt: C, data: &mut [u8]) {
-    assert_eq!(data.len() % 16, 0);
+pub fn decrypt1<C: BlockDecrypt>(crypt: C, data: &mut [u8]) -> bool {
+    if data.len() % 16 != 0 {
+        return false;
+    }
     for chunk in data.chunks_mut(16) {
         crypt.decrypt_block(chunk.into());
     }
+    true
 }
 
 pub mod pkcs7 {
-    pub fn unpad(data: &mut Vec<u8>) {
+    pub fn unpad(data: &mut Vec<u8>) -> bool {
         if let Some(count) = data.last().copied() {
             if count == 0
                 || data[data.len() - usize::from(count)..]
@@ -68,26 +73,37 @@ pub mod pkcs7 {
                     .copied()
                     .any(|x| x != count)
             {
-                panic!("invalid pkcs7 padding");
+                return false;
             }
             data.truncate(data.len() - usize::from(count));
         }
+        true
     }
 }
 
-pub fn decrypt_aes(data: &[u8], key: &[u8]) -> Vec<u8> {
+pub fn decrypt_aes(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     let mut data = data.to_vec();
-    eprintln!("{:?}", String::from_utf8(key.to_vec()));
-    match key.len() * 8 {
-        128 => decrypt1(Aes128::new_from_slice(key).unwrap(), &mut data),
-        192 => decrypt1(Aes192::new_from_slice(key).unwrap(), &mut data),
-        256 => decrypt1(Aes256::new_from_slice(key).unwrap(), &mut data),
-        _ => panic!("invalid aes key len: {} (key: {:?})", key.len() * 8, key),
+    if !match key.len() * 8 {
+        128 => decrypt1(
+            Aes128::new_from_slice(key).map_err(|_| "invalid key")?,
+            &mut data,
+        ),
+        192 => decrypt1(
+            Aes192::new_from_slice(key).map_err(|_| "invalid key")?,
+            &mut data,
+        ),
+        256 => decrypt1(
+            Aes256::new_from_slice(key).map_err(|_| "invalid key")?,
+            &mut data,
+        ),
+        _ => false,
+    } {
+        return Err("invalid key or data length".to_owned());
     }
     let padded_len = data.len();
-    pkcs7::unpad(&mut data);
-    assert!((1..=16).contains(&(padded_len - data.len())));
-    data
+    (pkcs7::unpad(&mut data) && (1..=16).contains(&(padded_len - data.len())))
+        .then_some(data)
+        .ok_or_else(|| "invalid pkcs-7 padding".to_owned())
 }
 
 pub fn decrypt_data<D: AsRef<[u8]>>(data: D) -> DecryptData {
@@ -95,7 +111,7 @@ pub fn decrypt_data<D: AsRef<[u8]>>(data: D) -> DecryptData {
 }
 pub struct DecryptData(Vec<u8>);
 impl Cipher for DecryptData {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         decrypt_aes(&self.0, data)
     }
 }
@@ -105,27 +121,27 @@ pub fn decrypt_with<K: AsRef<[u8]>>(key: K) -> DecryptDataWith {
 }
 pub struct DecryptDataWith(Vec<u8>);
 impl Cipher for DecryptDataWith {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         decrypt_aes(data, &self.0)
     }
 }
 
 pub struct Base64Dec;
 impl Cipher for Base64Dec {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         let data = data
             .iter()
             .copied()
             .filter(|x| x.is_ascii_alphanumeric() || matches!(x, b'=' | b'/' | b'+' | b'_' | b'-'))
             .map(|x| match x {
-                b'_' => b'/',
-                b'-' => b'+',
+                b'-' => b'/',
+                b'_' => b'+',
                 x => x,
             })
             .collect::<Vec<_>>();
         base64_crate::engine::general_purpose::STANDARD
             .decode(data)
-            .expect("invalid base64")
+            .map_err(|_| "invalid base64".to_owned())
     }
 }
 
@@ -153,7 +169,7 @@ fn crazy(mut a: u16, mut b: u16) -> u16 {
 
 pub struct Malbolge(VecDeque<u8>);
 impl Cipher for Malbolge {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         let mut ret = vec![];
         let mut mem = vec![0u16; 3usize.pow(10)];
         let mut filled = 0usize;
@@ -166,10 +182,7 @@ impl Cipher for Malbolge {
             if matches!(opcode, 4 | 5 | 23 | 39 | 40 | 62 | 68 | 81) {
                 *mem = byte.into();
             } else {
-                panic!(
-                    "invalid malbolge opcode: {opcode}/{:?}",
-                    char::from_u32(opcode as u32)
-                );
+                return Err("invalid opcode".to_owned());
             }
         }
         {
@@ -187,7 +200,13 @@ impl Cipher for Malbolge {
             match (c + usize::from(mem[c])) % 94 {
                 4 => c = mem[d].into(),
                 5 => ret.push(a as u8),
-                23 => a = self.0.pop_front().unwrap().into(),
+                23 => {
+                    a = self
+                        .0
+                        .pop_front()
+                        .ok_or("missing input for malbolge")?
+                        .into()
+                }
                 39 => {
                     a = mem[d] % 3 * POW3[9] + mem[d] / 3;
                     mem[d] = a;
@@ -207,7 +226,7 @@ impl Cipher for Malbolge {
             c %= usize::from(POW3[10]);
             d %= usize::from(POW3[10]);
         }
-        ret
+        Ok(ret)
     }
 }
 
@@ -218,11 +237,13 @@ pub fn malbolge() -> Malbolge {
 pub struct FuzzyReplace(Vec<u8>, Vec<u8>, bool);
 
 impl Cipher for FuzzyReplace {
-    fn process(&mut self, data: &[u8]) -> Vec<u8> {
+    fn process(&mut self, data: &[u8]) -> Result<Vec<u8>> {
         let mut ret = vec![];
         let mut target0 = [0usize; 256];
         for x in self.0.iter().copied() {
-            target0[usize::from(x)] = target0[usize::from(x)].checked_add(1).unwrap();
+            target0[usize::from(x)] = target0[usize::from(x)]
+                .checked_add(1)
+                .ok_or("too many chars to replace")?;
         }
         let mut target = target0;
         let mut buf = VecDeque::new();
@@ -245,12 +266,13 @@ impl Cipher for FuzzyReplace {
             }
         }
         if self.2 && !done {
-            panic!("fuzzy match not found for single replace");
+            // fuzzy match not found for single replace
+            return Err("single fuzzy match not found".to_owned());
         }
         let (a, b) = buf.as_slices();
         ret.extend_from_slice(a);
         ret.extend_from_slice(b);
-        ret
+        Ok(ret)
     }
 }
 
@@ -270,9 +292,11 @@ mod test {
             ),
             POW3[9] + POW3[6] + 2 * POW3[4] + 2 * POW3[3] + 2 * POW3[2] + POW3[1] + POW3[0],
         );
-        assert_eq!(malbolge().process(b"(=<`#9]~6ZY327Uv4-QsqpMn&+Ij\"'E%e{Ab~w=_:]Kw%o44Uqp0/Q?xNvL:`H%c#DD2^WV>gY;dts76qKJImZkj"), b"Hello, world.");
+        assert_eq!(malbolge().process(b"(=<`#9]~6ZY327Uv4-QsqpMn&+Ij\"'E%e{Ab~w=_:]Kw%o44Uqp0/Q?xNvL:`H%c#DD2^WV>gY;dts76qKJImZkj").unwrap(), b"Hello, world.");
         assert_eq!(
-            fuzzy_replace(b"12345", b"abc", true).process(b"b42315"),
+            fuzzy_replace(b"12345", b"abc", true)
+                .process(b"b42315")
+                .unwrap(),
             b"babc"
         );
     }
