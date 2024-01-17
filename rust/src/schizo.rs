@@ -48,8 +48,8 @@ impl std::iter::FusedIterator for RevShift {}
 // for meaning of life...
 pub fn reverse_numbers(src: &str) -> Vec<BigUint> {
     let set = HashSet::<char>::from_iter(src.chars());
-    // sanity check: up to 10 digits
-    if set.len() > 10 {
+    // sanity check: 4 to 10 digits (4 is needed for starting with 17 and ending with 24)
+    if !(4..=10).contains(&set.len()) {
         return vec![];
     }
     // sanity check: all are valid hex digits

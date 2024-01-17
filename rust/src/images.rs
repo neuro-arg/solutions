@@ -3,61 +3,120 @@
 
 use std::path::Path;
 
-pub fn meaning_of_life_reassemble() {
-    // doesn't really work well, oh well
-    let mut img =
+pub fn split_img() {
+    let img =
         image::open("../../neuro-arg.github.io/static/images/wdym-enhance-frame2.png").unwrap();
-    let x_start = 3300;
+    let img = img.into_luma_alpha8();
+    let mut total = 0;
+    for i in (0..(img.height() as usize)).skip(1300).take(100) {
+        let mut out = img.clone();
+        let data = out.as_mut();
+        data[0..i * img.width() as usize * 2].fill(0);
+        data[(i + 1) * img.width() as usize * 2..].fill(0);
+        total += data[i * img.width() as usize * 2..(i + 1) * img.width() as usize * 2]
+            .windows(126 * 2)
+            .skip(1690)
+            .map(|x| {
+                let a = *x.first().unwrap() as u64;
+                let b = *x.get(x.len() - 2).unwrap() as u64;
+                if a > 0xc0 && b > 1 {
+                    1i64
+                } else if a > 1 {
+                    -100i64
+                } else {
+                    0
+                }
+            })
+            .sum::<i64>();
+        println!("{i} {total}");
+        total = 0;
+        // out.save(format!("out/{i:04}.png")).unwrap();
+    }
+}
+
+pub fn test() {
+    let img =
+        image::open("../../neuro-arg.github.io/static/images/wdym-enhance-frame2.png").unwrap();
+    let mut img = img.into_luma8();
+    let (width, _height) = (img.width(), img.height());
+    for (_i, row) in img.chunks_exact_mut(width as usize).enumerate() {
+        for w in 1..row.len() {
+            row[w - 1] = if (row[w] as i32) < (row[w - 1] as i32) - 20 {
+                255
+            } else {
+                0
+            };
+        }
+    }
+    img.save("out.png").unwrap();
+}
+
+pub fn meaning_of_life_reassemble() {
+    // only reassembles the text, the rest is on a best-effort basis
+    let mut img = image::open("../../neuro-arg.github.io/static/images/wdym-enhance-frame2.png")
+        .unwrap()
+        .into_luma8();
+    let x_start = 2025;
     let x_end = 3600;
-    let y_start = 800;
     let (width, height) = (img.width(), img.height());
-    let data = img.as_mut_rgb8().unwrap();
-    let mut old2 = data.chunks_exact(width as usize * 3).nth(y_start).unwrap()
-        [x_start * 3..x_end * 3]
-        .to_vec();
-    let mut old = data.chunks_exact(width as usize * 3).nth(y_start).unwrap()
-        [x_start * 3..x_end * 3]
-        .to_vec();
-    for (i, row) in data
-        .chunks_exact_mut(width as usize * 3)
-        .skip(y_start)
-        .enumerate()
-    {
-        let mut best_score: u64 = 0;
-        let mut best_shift: isize = 0;
-        // for mut shift in -((width - x_end as u32) as isize)..=(width - x_end as u32) as isize {
-        for mut shift in [0, 128, 234, 288, 352, 418] {
-            shift *= 3;
-            let w = &row[((x_start as isize * 3 + shift) as usize).min(row.len())
-                ..((x_end as isize * 3 + shift) as usize).min(row.len())];
-            let score: u64 = old
-                .iter()
-                .copied()
-                .zip(old2.iter().copied())
-                .zip(w.iter().copied())
-                .map(|((a1, a2), b)| {
-                    (if (a1 >= 80) && (b >= 80) { 2u64 } else { 0 })
-                        + (if (a1 >= 128) && (b >= 128) { 2u64 } else { 0 })
-                        + (if (a2 >= 80) && (b >= 80) { 1u64 } else { 0 })
-                })
-                .sum();
-            if score > best_score {
-                best_score = score;
-                best_shift = shift;
+    let mut old2 = img.chunks_exact(width as usize).next().unwrap()[x_start..x_end].to_vec();
+    let mut old = img.chunks_exact(width as usize).next().unwrap()[x_start..x_end].to_vec();
+    let mut ofs = vec![0isize; height as usize];
+    for row in img.chunks_exact_mut(width as usize) {
+        row.rotate_left(425);
+        let len = row.len();
+        row[(len - 425)..].fill(0);
+    }
+    for rev in [false, true] {
+        let mut chunks = img
+            .chunks_exact_mut(width as usize)
+            .enumerate()
+            .collect::<Vec<_>>();
+        if rev {
+            chunks.reverse();
+        }
+        for (i, row) in chunks {
+            let mut best_score: i64 = 0;
+            let mut best_shift: isize = 0;
+            // actually only shifts with mod 60 in {-5,0,5} are allowed
+            // but that's too annoying to program
+            for shift in ((-425isize / 5)..=(425isize / 5))
+                .map(|x| x * 5)
+                .filter(|shift| *shift + ofs[i] <= 600)
+            {
+                let w = &row[((x_start as isize + shift) as usize).min(row.len())
+                    ..((x_end as isize + shift) as usize).min(row.len())];
+                let score: i64 = old
+                    .iter()
+                    .copied()
+                    .zip(old2.iter().copied())
+                    .zip(w.iter().copied())
+                    // .take(x_end - x_start - 425)
+                    .map(|((a1, a2), b)| {
+                        (if (a1 >= 70) && (b >= 70) { 20i64 } else { 0 })
+                            + (if (a1 >= 128) && (b >= 128) { 10i64 } else { 0 })
+                            + (if (a2 >= 128) && (b >= 128) { 15i64 } else { 0 })
+                            + (if (a2 >= 70) && (b >= 70) { 30i64 } else { 0 })
+                    })
+                    .sum::<i64>()
+                    - (shift as i64 + 5) / 50;
+                if score >= best_score {
+                    best_score = score;
+                    best_shift = shift;
+                }
             }
+            if best_shift < 0 {
+                row.rotate_right(-best_shift as usize);
+            } else {
+                row.rotate_left(best_shift as usize);
+                let len = row.len();
+                row[(len - best_shift as usize)..].fill(0);
+            }
+            ofs[i] += best_shift;
+            println!("{i}/{height}");
+            old2 = old;
+            old = row[x_start..x_end].to_vec();
         }
-        if best_shift < 0 {
-            row.rotate_right(-best_shift as usize);
-        } else {
-            row.rotate_left(best_shift as usize);
-            let len = row.len();
-            row[(len - best_shift as usize)..].fill(0);
-        }
-        println!("{i}/{height}");
-        old2 = old;
-        old = row[x_start * 3..x_end * 3].to_vec();
-        //row[..x_start * 3].fill(0);
-        //row[x_end * 3..].fill(0);
     }
     img.save("out.png").unwrap();
 }

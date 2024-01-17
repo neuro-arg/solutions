@@ -66,7 +66,7 @@ pub mod numbers1 {
     pub fn answer() -> String {
         process_string(
             data::NUMBERS_BASE64,
-            base64().chain(decrypt_with(calc(data::NUMBER.into()))),
+            &mut base64().chain(decrypt_with(calc(data::NUMBER.into()))),
         )
         .unwrap()
     }
@@ -78,13 +78,13 @@ pub mod study {
     pub fn phone() -> String {
         process_string(
             data::STUDY_BASE64,
-            base64().chain(decrypt_with(numbers1::calc(data::NUMBER.into()))),
+            &mut base64().chain(decrypt_with(numbers1::calc(data::NUMBER.into()))),
         )
         .unwrap()
     }
 
     pub fn malbolge_code() -> String {
-        process_string(data::STUDY_MALBOLGE, malbolge()).unwrap()
+        process_string(data::STUDY_MALBOLGE, &mut malbolge()).unwrap()
     }
 }
 
@@ -94,7 +94,7 @@ pub mod numbers2 {
     pub fn stage1() -> (String, String) {
         let mut ret = process_string(
             data::NUMBERS2_BASE64,
-            base64().chain(decrypt_with(data::NUMBERS2_NUEROS)),
+            &mut base64().chain(decrypt_with(data::NUMBERS2_NUEROS)),
         )
         .unwrap();
         let cipher = split_off_last_word(&mut ret);
@@ -107,7 +107,7 @@ pub mod numbers2 {
                 .take(500)
                 .collect::<String>()
                 .as_bytes(),
-            {
+            &mut {
                 let mut op = Cipher::chain(Noop, Noop);
                 for nums in data::NUMBERS2 {
                     let digits: String = nums.map(|x| x.to_string()).into_iter().collect();
@@ -117,13 +117,13 @@ pub mod numbers2 {
             },
         )
         .unwrap()[..16];
-        let mut ret = process_string(stage1().1, base64().chain(decrypt_with(key))).unwrap();
+        let mut ret = process_string(stage1().1, &mut base64().chain(decrypt_with(key))).unwrap();
         let cipher = split_off_last_word(&mut ret);
         (ret, cipher)
     }
 
     pub fn stage3() -> String {
-        process_string(stage2().1.as_bytes(), malbolge()).unwrap()
+        process_string(stage2().1.as_bytes(), &mut malbolge()).unwrap()
     }
 
     pub fn all_stages() -> (String, String, String) {
@@ -145,7 +145,11 @@ pub mod soundcloud {
             .chars()
             .filter(|x| !x.is_ascii_digit())
             .collect();
-        process_string(data::SOUNDCLOUD_BASE64, base64().chain(decrypt_with(key))).unwrap()
+        process_string(
+            data::SOUNDCLOUD_BASE64,
+            &mut base64().chain(decrypt_with(key)),
+        )
+        .unwrap()
     }
 }
 
@@ -198,7 +202,7 @@ pub mod filtered {
         );
         process_string(
             data::FILTERED_BASE64,
-            base64().chain(decrypt_with(code[code.len() - 16..].as_bytes())),
+            &mut base64().chain(decrypt_with(code[code.len() - 16..].as_bytes())),
         )
         .unwrap()
     }
@@ -260,27 +264,9 @@ mod meaning_of_life {
 }
 
 fn main() {
-    println!(
-        "{}",
-        process_string(
-            math::FibonacciDigits::<num::BigUint>::new()
-                .take(10000)
-                .collect::<String>()
-                .as_bytes(),
-            {
-                let mut op = Cipher::chain(Noop, Noop);
-                for nums in data::NUMBERS2 {
-                    let digits: String = nums.map(|x| x.to_string()).into_iter().collect();
-                    op = op.chain(bytes::fuzzy_replace(digits.as_bytes(), &[], true));
-                }
-                for digits in ["692048501", "258949201"] {
-                    op = op.chain(bytes::fuzzy_replace(digits.as_bytes(), &[], true));
-                }
-                op
-            },
-        )
-        .unwrap()
-    );
+    //images::idk();
+    images::meaning_of_life_reassemble();
+    //images::split_img();
     //println!("{}", numbers1::calc(data::MEANING_OF_LIFE_NUM.into()));
     /*for n in data::NUMBERS2.into_iter().flatten() {
         println!("{n} {}", numbers1::calc(n.into()));
@@ -291,14 +277,18 @@ fn main() {
     // a758eeb757d82e28d8f2df0e2b
     // filtered::denoise_image();
     // 175fbfbf757f7bce
-    /*let hex = "1bad0fcabc1ebdce";
-    for num in schizo::reverse_numbers(hex) {
-        let a = numbers1::calc(num.clone());
-        // let b = process_string(&a, bytes::fuzzy_replace(b"692048501258949201", b"", false));
-        // if a != b {
-        println!("{num} {a}");
-        // }
-    }*/
+    let hex = meaning_of_life::hex();
+    let data = bytes::base64()
+        .process(data::MEANING_OF_LIFE_BASE64.as_bytes())
+        .unwrap();
+    let mut cipher = bytes::decrypt_data(data);
+    for num in schizo::reverse_numbers(&hex) {
+        for idk in num.to_string().as_bytes().windows(16) {
+            if let Ok(data) = process_string(idk, &mut cipher) {
+                println!("{:?}", data);
+            }
+        }
+    }
     //println!("{}", numbers1::calc(692048u32.into()));
     // println!("{:?}", meaning_of_life::answer());
     // println!("{:?}", meaning_of_life::reassemble_image());

@@ -10,7 +10,7 @@ use crate::Noop;
 
 type Result<T> = std::result::Result<T, String>;
 
-pub fn process_string<X: AsRef<[u8]>, W: Cipher>(data: X, mut cipher: W) -> Result<String> {
+pub fn process_string<X: AsRef<[u8]>>(data: X, cipher: &mut impl Cipher) -> Result<String> {
     String::from_utf8(cipher.process(data.as_ref())?).map_err(|_| "invalid utf-8 string".to_owned())
 }
 
