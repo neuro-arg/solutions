@@ -1,12 +1,16 @@
 use crate::bytes::{process_string, Cipher};
 
 // two small combinator libraries for processing data and numbers
+pub mod audio;
 pub mod bytes;
 pub mod data;
 pub mod images;
 pub mod math;
 pub mod numbers;
+pub mod qr;
 pub mod schizo;
+#[cfg(feature = "video")]
+pub mod video;
 
 pub struct Noop;
 
@@ -154,7 +158,7 @@ pub mod soundcloud {
 }
 
 pub mod filtered {
-    use crate::{bytes::*, data, images};
+    use crate::{bytes::*, data};
 
     #[derive(Clone, Debug)]
     pub struct Shift(String, u32);
@@ -188,10 +192,6 @@ pub mod filtered {
         }
     }
     impl std::iter::FusedIterator for Shift {}
-
-    pub fn denoise_image() {
-        images::filtered_denoise("noise.png", "out.png");
-    }
 
     pub fn answer() -> String {
         let code =
@@ -264,8 +264,40 @@ mod meaning_of_life {
 }
 
 fn main() {
+    #[cfg(feature = "video")]
+    ffmpeg::init().unwrap();
+    // video::brightness_graph2("f_psv", "brightness/psv1.png", 637, 476);
+    // video::brightness_graph2("f_psv", "brightness/psv.png", 0, 0);
+    // video::brightness_graph2("f_study", "brightness/study.png", 0, 0);
+    // video::brightness_graph2("f_helloworld", "brightness/hello.png", 0, 0);
+    // video::brightness_graph2("f_unfiltered", "brightness/filtered.png", 100, 0);
+    // video::brightness_graph2("f_mol", "brightness/mol.png", 0, 0);
+    qr::create_qr();
+    return;
+    /*video::xor_frames("f_unfiltered", "f_test");
+    video::brightness_graph(
+        "../../yt/Meaning of life [IRzyqcKljxw].mkv",
+        "brightness/mol.png",
+    );
+    video::brightness_graph("../../yt/Numbers II [giJI-TDbO5k].mkv", "brightness/n2.png");
+    video::brightness_graph("../../yt/Numbers [wc-QCoMm4J8].mkv", "brightness/n1.png");
+    video::brightness_graph(
+        "../../yt/Public Static Void [ymYFqNUt05g].mkv",
+        "brightness/psv.png",
+    );
+    video::brightness_graph("../../yt/Study [zMlH7RH6psw].mkv", "brightness/study.png");
+    video::brightness_graph(
+        "../../yt/[Filtered] [4j5oDzRiXUA].mkv",
+        "brightness/filtered.png",
+    );
+    video::brightness_graph(
+        "../../yt/hello world! [OiKrYrbs3Qs].mkv",
+        "brightness/helloworld.png",
+    );
+    return;*/
+    //images::filtered_denoise("o.mkv", "out.ivf");
     //images::idk();
-    images::meaning_of_life_reassemble();
+    //images::meaning_of_life_reassemble();
     //images::split_img();
     //println!("{}", numbers1::calc(data::MEANING_OF_LIFE_NUM.into()));
     /*for n in data::NUMBERS2.into_iter().flatten() {

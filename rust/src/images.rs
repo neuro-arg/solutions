@@ -1,8 +1,6 @@
 // best run in release mode, debug is slow for image processing
 // (this is just my random experiments in image processing)
 
-use std::path::Path;
-
 pub fn split_img() {
     let img =
         image::open("../../neuro-arg.github.io/static/images/wdym-enhance-frame2.png").unwrap();
@@ -121,21 +119,17 @@ pub fn meaning_of_life_reassemble() {
     img.save("out.png").unwrap();
 }
 
-pub fn filtered_denoise(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
-    let data = image::open(src.as_ref()).unwrap();
-    let data = if data.width() == 1920 {
-        data.crop_imm(391, 0, 1920 - 391 * 2, data.height())
+pub fn filtered_denoise_img(img: image::DynamicImage) -> image::DynamicImage {
+    let mut data = if img.width() == 1920 {
+        img.crop_imm(391, 0, 1920 - 391 * 2, img.height())
             .into_luma8()
     } else {
-        data.into_luma8()
+        img.into_luma8()
     };
-    let (width, height) = (data.width(), data.height());
-    let mut ret = image::DynamicImage::new_luma8(width, height);
-    let ret_data = ret.as_mut_luma8().unwrap();
-    for (row, ret_row) in data
-        .chunks_exact(width as usize)
-        .zip(ret_data.chunks_exact_mut(width as usize))
-    {
+    let (width, _height) = (data.width(), data.height());
+    // let mut ret = image::DynamicImage::new_luma8(width, height);
+    // let ret_data = ret.as_mut_luma8().unwrap();
+    for row in data.chunks_exact_mut(width as usize) {
         let rot = row
             .windows(75)
             .map(|v| v.iter().filter(|x| **x > 128).count().abs_diff(15))
@@ -144,8 +138,8 @@ pub fn filtered_denoise(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
             .unwrap()
             .0
             + 75;
-        ret_row.copy_from_slice(row);
-        ret_row.rotate_left(rot);
+        row.rotate_left(rot);
     }
-    ret.save(dst.as_ref()).unwrap();
+    data.into()
 }
+
