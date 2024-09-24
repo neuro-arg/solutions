@@ -140,7 +140,7 @@ pub fn reverse_numbers(src: &str) -> Vec<BigUint> {
         }
     }
     ret.into_iter()
-        .filter(|x| crate::numbers1::calc(x.clone()) == src)
+        .filter(|x| crate::numbers1::calc(x.clone(), "abcdef") == src)
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()

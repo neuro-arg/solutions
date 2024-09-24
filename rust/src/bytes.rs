@@ -102,7 +102,7 @@ pub fn decrypt_aes(data: &[u8], key: &[u8]) -> Result<Vec<u8>> {
     }
     let padded_len = data.len();
     (pkcs7::unpad(&mut data) && (1..=16).contains(&(padded_len - data.len())))
-        .then_some(data)
+        .then_some(data.clone())
         .ok_or_else(|| "invalid pkcs-7 padding".to_owned())
 }
 

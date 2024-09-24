@@ -34,7 +34,7 @@ pub mod numbers1 {
 
     use crate::{bytes::*, data, numbers::*};
 
-    pub fn calc(num: BigUint) -> String {
+    pub fn calc(num: BigUint, key: &str) -> String {
         let ret = apply_num_op(
             num.clone(),
             prepend_digits(BigUint::from(2u8))
@@ -49,14 +49,7 @@ pub mod numbers1 {
                 .chain(prepend_digits(17u8.into())),
         );
         let mut map = HashMap::new();
-        for (a, b) in num
-            .to_string()
-            .chars()
-            .zip(std::iter::successors(Some('a'), |x| {
-                char::from_u32(*x as u32 + 1)
-            }))
-            .take(6)
-        {
+        for (a, b) in num.to_string().chars().zip(key.chars()) {
             map.insert(a, b);
             // map.entry(a).or_insert(b);
         }
@@ -70,7 +63,7 @@ pub mod numbers1 {
     pub fn answer() -> String {
         process_string(
             data::NUMBERS_BASE64,
-            &mut base64().chain(decrypt_with(calc(data::NUMBER.into()))),
+            &mut base64().chain(decrypt_with(calc(data::NUMBER.into(), "abcdef"))),
         )
         .unwrap()
     }
@@ -82,7 +75,7 @@ pub mod study {
     pub fn phone() -> String {
         process_string(
             data::STUDY_BASE64,
-            &mut base64().chain(decrypt_with(numbers1::calc(data::NUMBER.into()))),
+            &mut base64().chain(decrypt_with(numbers1::calc(data::NUMBER.into(), "abcdef"))),
         )
         .unwrap()
     }
@@ -132,6 +125,40 @@ pub mod numbers2 {
 
     pub fn all_stages() -> (String, String, String) {
         (stage1().0, stage2().0, stage3())
+    }
+}
+
+pub mod candle {
+    use crate::{
+        bytes::{base64, decrypt_with, process_string, Cipher},
+        data,
+        math::FibonacciDigits,
+        numbers1,
+    };
+
+    pub fn numbers_answer() -> String {
+        let k0 = data::NUMBER.to_string();
+        let mut k = k0.chars();
+        let key = k0.clone()
+            + &FibonacciDigits::<num::BigUint>::new()
+                .skip_while(|x| match k.next() {
+                    Some(y) => {
+                        if y != *x {
+                            k = k0.chars();
+                        }
+                        true
+                    }
+                    None => false,
+                })
+                .take(16)
+                .collect::<String>();
+        let key = key.parse().unwrap();
+        let key = numbers1::calc(key, data::CANDLE_GIST);
+        process_string(
+            data::CANDLE_NUMBERS_BASE64,
+            &mut base64().chain(decrypt_with(key)),
+        )
+        .unwrap()
     }
 }
 
@@ -272,7 +299,8 @@ fn main() {
     // video::brightness_graph2("f_helloworld", "brightness/hello.png", 0, 0);
     // video::brightness_graph2("f_unfiltered", "brightness/filtered.png", 100, 0);
     // video::brightness_graph2("f_mol", "brightness/mol.png", 0, 0);
-    qr::create_qr();
+    // qr::create_qr();
+    println!("{}", candle::numbers_answer());
     return;
     /*video::xor_frames("f_unfiltered", "f_test");
     video::brightness_graph(
