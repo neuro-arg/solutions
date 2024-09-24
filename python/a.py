@@ -9,6 +9,18 @@ from typing import List, Union
 
 POW3 = [3 ** i for i in range(11)]
 
+def vigenere(data, key):
+    key = [ord(i) if isinstance(i, str) else i for i in key]
+    data = [ord(i) if isinstance(i, str) else i for i in data]
+    ret = ''
+    for i in range(len(data)):
+        if chr(data[i]).isalpha():
+            value = (data[i] - key[i % len(key)]) % 26
+            ret += chr(value + ord('a'))
+        else:
+            ret += chr(data[i])
+    return ret
+
 def encode(x: Union[str, bytes]) -> bytes:
     if isinstance(x, bytes): return x
     return x.encode('utf-8')
@@ -247,11 +259,12 @@ def meaning_of_life():
         str(num),
         hex(num)[2:],
     ]
-    print(possible_values)
-    return
-    for i in range(1, 1000):
-        eh = shift_characters(eh)
+    #eh = vigenere(''.join('bb ce td ht eft ggd sgfi dqj ie br vtye b sbs'.split()), map(lambda x: ord('a') - int(x), str(num)))
+    #print(possible_values)
+    #return
+    for i in range(1, 100):
         print(i, eh)
+        eh = shift_characters(eh)
 
 ALL = [
     numbers(),
@@ -265,6 +278,6 @@ ALL = [
     # hello world! = [Filtered] hint?
 ]
 
-# print('\n==========\n'.join(ALL))
+print('\n==========\n'.join(ALL))
 
-print(meaning_of_life())
+# print(meaning_of_life())
