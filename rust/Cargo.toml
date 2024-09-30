@@ -23,4 +23,4 @@ video = [
   # "rav1e",
   # "ivf",
 ]
-# default = ["video"]
+default = ["video"]

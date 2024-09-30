@@ -46,7 +46,22 @@ impl Iterator for RevShift {
 impl std::iter::FusedIterator for RevShift {}
 
 // for meaning of life...
-pub fn reverse_numbers(src: &str) -> Vec<BigUint> {
+pub fn reverse_numbers(src: &str, key: &str) -> Vec<BigUint> {
+    // 0 may be literal 0, or digit replaced with 0 in the key
+    // former is easy
+    // in the latter case, the digit that maps to it can never occur in the number anymore
+    // everything is complicated by the fact multiple digits may map to the same digit
+    // if something is a letter rather than a digit, then the former case is skipped
+    // if 0 isnt in the key, the latter case is skipped
+    //
+    // I repeat: multiple values may map to the same value
+    // aa...aa is valid for a key that replace 1 with a, 7 with a, 2 with a, 4 with a
+    // so, it isnt really possible to list all the cases all the time
+    let mut possible_positions = HashMap::<char, usize>::new();
+    for (i, c) in key.chars().enumerate() {
+        possible_positions.insert(c, i);
+    }
+
     let set = HashSet::<char>::from_iter(src.chars());
     // sanity check: 4 to 10 digits (4 is needed for starting with 17 and ending with 24)
     if !(4..=10).contains(&set.len()) {
@@ -140,7 +155,7 @@ pub fn reverse_numbers(src: &str) -> Vec<BigUint> {
         }
     }
     ret.into_iter()
-        .filter(|x| crate::numbers1::calc(x.clone(), "abcdef") == src)
+        .filter(|x| crate::numbers1::calc(x.clone(), key) == src)
         .collect::<BTreeSet<_>>()
         .into_iter()
         .collect()

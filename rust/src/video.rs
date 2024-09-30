@@ -1,5 +1,6 @@
 use std::{
     collections::VecDeque,
+    io::Read,
     path::{Path, PathBuf},
     sync::mpsc,
 };
@@ -10,7 +11,7 @@ use ffmpeg::{
     media::Type,
     software::scaling::{Context, Flags},
 };
-use image::GenericImage;
+use image::{GenericImage, GenericImageView, RgbImage};
 
 /*
 const FILTERED_W: u32 = 1920 - 391 * 2;
@@ -352,5 +353,149 @@ pub fn xor_frames(dir: impl AsRef<Path>, out: impl AsRef<Path>) {
         }
         old.save(out.as_ref().join(format!("{i:04}.png"))).unwrap();
         old = frame;
+    }
+}
+
+pub fn rate_candles_frame(src: impl AsRef<Path>) -> Option<usize> {
+    let img = image::open(src).unwrap();
+    let frame = img.into_rgb8();
+    let mut cur = u64::MAX;
+    let mut vals = Vec::new();
+    for n in 1..256 {
+        let mut img = RgbImage::new(frame.width(), frame.height() / n as u32);
+        let mut sum = 0u64;
+        for ofs in 0..n {
+            for (dst, src) in img.rows_mut().zip(frame.rows().skip(ofs).step_by(n)) {
+                for (dst, src) in dst.zip(src) {
+                    *dst = *src;
+                }
+            }
+            let mut prev = None::<&[u8]>;
+            let mut sum0 = 0u64;
+            for row in img.as_ref().chunks_exact(3 * img.width() as usize) {
+                if let Some(prev) = prev {
+                    for (a, b) in prev.iter().zip(row.iter()) {
+                        sum += (*a ^ *b) as u64; // a.abs_diff(*b) as u64;
+                    }
+                }
+                prev = Some(row);
+            }
+            sum0 /= img.height() as u64 - 1;
+            sum += sum0;
+        }
+        sum /= n as u64;
+        if sum < cur {
+            if n > 4 {
+                vals.push(((((cur as f64) / (sum as f64)) * 1000.0) as u64, n));
+            }
+            /*if sum as f64 <= (cur as f64) / 1.4 {
+                println!("{n} {sum}!");
+            } else {
+                println!("{n} {sum}");
+            }*/
+            cur = sum;
+        }
+    }
+    vals.sort();
+    if let Some((a, b)) = vals.last() {
+        (*a > 1300).then_some(*b)
+    } else {
+        None
+    }
+}
+
+pub fn rate_candles_frames(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
+    let mut threads = vec![];
+    for j in 1..=16 {
+        let src = src.as_ref().to_path_buf();
+        let dst = dst.as_ref().to_path_buf();
+        threads.push(std::thread::spawn(move || {
+            for i in 0..9999999 {
+                let src1 = src.join(&format!("{:04}.png", i * 16 + j));
+                let Ok(_img) = image::open(&src1) else {
+                    break;
+                };
+                if let Some(n) = rate_candles_frame(src1) {
+                    if n > 127 {
+                        candles_frames(&src, &dst, format!("{:04}", i * 16 + j), n);
+                    }
+                }
+            }
+        }));
+    }
+    for thread in threads {
+        thread.join().unwrap();
+    }
+}
+
+pub fn candles_frame(src: impl AsRef<Path>, dst: impl AsRef<Path>, n: usize, ofs: usize) {
+    let img = image::open(src).unwrap();
+    let frame = img.into_rgb8();
+    let mut img = RgbImage::new(frame.width(), frame.height() / n as u32);
+    for (dst, src) in img.rows_mut().zip(frame.rows().skip(ofs).step_by(n)) {
+        for (dst, src) in dst.zip(src) {
+            *dst = *src;
+        }
+    }
+    let img = image::imageops::resize(
+        &img,
+        frame.width(),
+        frame.height(),
+        image::imageops::FilterType::Nearest,
+    );
+    img.save(dst).unwrap();
+}
+
+pub fn candles_frames(
+    src: impl AsRef<Path>,
+    dst: impl AsRef<Path>,
+    dst_name: impl AsRef<str>,
+    n: usize,
+) {
+    let dst_name = dst_name.as_ref();
+    let mut src = src.as_ref().to_owned();
+    src.push(format!("{dst_name}.png"));
+    for ofs in 0..n {
+        let mut dst = dst.as_ref().to_owned();
+        dst.push(format!("{dst_name}_{ofs:03}.png"));
+        candles_frame(&src, dst, n, ofs)
+    }
+}
+
+pub fn candles_cycles(dir: impl AsRef<Path>, out: impl AsRef<Path>) {
+    let mut rxs = VecDeque::new();
+    for j in 1..=16 {
+        let dir = dir.as_ref().to_path_buf();
+        let (tx, rx) = mpsc::sync_channel(64);
+        rxs.push_back(rx);
+        std::thread::spawn(move || {
+            for i in 57..61 {
+                let Ok(img) = image::open(dir.join(&format!("{:04}.png", i * 16 + j))) else {
+                    break;
+                };
+                let frame = img.into_rgb8();
+                if tx.send((i * 16 + j, frame)).is_err() {
+                    break;
+                }
+            }
+        });
+    }
+    let x = "abcdefghijklmnopqrstuvwx";
+    while let Ok((i, frame)) = {
+        let rx = rxs.pop_front().unwrap();
+        let x = rx.recv();
+        rxs.push_back(rx);
+        x
+    } {
+        for (o, c) in x.chars().enumerate() {
+            let mut img = RgbImage::new(frame.width(), frame.height() / x.len() as u32);
+            for (dst, src) in img.rows_mut().zip(frame.rows().skip(o).step_by(x.len())) {
+                for (dst, src) in dst.zip(src) {
+                    *dst = *src;
+                }
+            }
+            img.save(out.as_ref().join(format!("{c}{i:04}.png")))
+                .unwrap();
+        }
     }
 }

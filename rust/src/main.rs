@@ -254,9 +254,9 @@ mod meaning_of_life {
     #[allow(unused)]
     pub fn schizo() {
         // !!!
-        for num in schizo::reverse_numbers(&hex()) {
+        /*for num in schizo::reverse_numbers(&hex()) {
             println!("{num}");
-        }
+        }*/
     }
 
     #[allow(unused)]
@@ -299,8 +299,35 @@ fn main() {
     // video::brightness_graph2("f_helloworld", "brightness/hello.png", 0, 0);
     // video::brightness_graph2("f_unfiltered", "brightness/filtered.png", 100, 0);
     // video::brightness_graph2("f_mol", "brightness/mol.png", 0, 0);
+    video::rate_candles_frames("f_filtered", "f_fd");
+    /*if std::env::args().count() == 2 {
+        video::rate_candles_frame(format!(
+            "f_filtered/{}.png",
+            std::env::args().nth(1).unwrap()
+        ));
+    } else {
+        video::candles_frames(
+            "f_filtered",
+            "tmp",
+            std::env::args().nth(1).unwrap(),
+            std::env::args().nth(2).unwrap().parse().unwrap(),
+        );
+    }*/
+    // cli tool 2
+    /*let mut threads = Vec::new();
+    for i in 1..=69 {
+        threads.push(std::thread::spawn(move || video::candles_frame(
+            std::env::args().nth(1).unwrap(),
+            format!("tmp/{i:02}.png"),
+            i,
+            0,
+        )));
+    }
+    for thread in threads {
+        thread.join().unwrap();
+    }*/
     // qr::create_qr();
-    println!("{}", candle::numbers_answer());
+    // println!("{}", candle::numbers_answer());
     return;
     /*video::xor_frames("f_unfiltered", "f_test");
     video::brightness_graph(
@@ -342,13 +369,13 @@ fn main() {
         .process(data::MEANING_OF_LIFE_BASE64.as_bytes())
         .unwrap();
     let mut cipher = bytes::decrypt_data(data);
-    for num in schizo::reverse_numbers(&hex) {
+    /*for num in schizo::reverse_numbers(&hex) {
         for idk in num.to_string().as_bytes().windows(16) {
             if let Ok(data) = process_string(idk, &mut cipher) {
                 println!("{:?}", data);
             }
         }
-    }
+    }*/
     //println!("{}", numbers1::calc(692048u32.into()));
     // println!("{:?}", meaning_of_life::answer());
     // println!("{:?}", meaning_of_life::reassemble_image());
