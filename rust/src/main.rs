@@ -1,4 +1,4 @@
-use crate::bytes::{process_string, Cipher};
+use crate::bytes::Cipher;
 
 // two small combinator libraries for processing data and numbers
 pub mod audio;
@@ -299,20 +299,31 @@ fn main() {
     // video::brightness_graph2("f_helloworld", "brightness/hello.png", 0, 0);
     // video::brightness_graph2("f_unfiltered", "brightness/filtered.png", 100, 0);
     // video::brightness_graph2("f_mol", "brightness/mol.png", 0, 0);
-    video::rate_candles_frames("f_filtered", "f_fd");
-    /*if std::env::args().count() == 2 {
-        video::rate_candles_frame(format!(
-            "f_filtered/{}.png",
-            std::env::args().nth(1).unwrap()
-        ));
+    // video::rate_candles_frames("f_filtered", "f_fd1"); return;
+    // images::filtered_denoise_img(image::open("f_fd/0134_023.png").unwrap()).save("out.png").unwrap(); return;
+    // image::imageops::rotate270(&images::candles_denoise_img(images::candles_open("f_candles2/2538.png"))).save("out.png").unwrap(); return;
+    // images::candles_denoise_img(images::filtered_open("f_filtered/0356.png")).save("out.png").unwrap(); return;
+    // video::filtered_denoise_dir("f_filtered", "f_unfiltered2"); return;
+    images::candles_denoise_graph("f_filtered").save("out.png").unwrap(); return;
+    //video::pattern_search(); return;
+    //audio::geiger();
+    if std::env::args().count() == 2 {
+        video::rate_candles_frame(
+            format!("f_filtered/{}.png", std::env::args().nth(1).unwrap()),
+            true,
+        );
     } else {
+        video::why_candles_frame(
+            format!("f_filtered/{}.png", std::env::args().nth(1).unwrap()),
+            std::env::args().nth(2).unwrap().parse().unwrap(),
+        );
         video::candles_frames(
             "f_filtered",
             "tmp",
             std::env::args().nth(1).unwrap(),
             std::env::args().nth(2).unwrap().parse().unwrap(),
         );
-    }*/
+    }
     // cli tool 2
     /*let mut threads = Vec::new();
     for i in 1..=69 {
@@ -364,11 +375,11 @@ fn main() {
     // a758eeb757d82e28d8f2df0e2b
     // filtered::denoise_image();
     // 175fbfbf757f7bce
-    let hex = meaning_of_life::hex();
-    let data = bytes::base64()
-        .process(data::MEANING_OF_LIFE_BASE64.as_bytes())
-        .unwrap();
-    let mut cipher = bytes::decrypt_data(data);
+    //let hex = meaning_of_life::hex();
+    /*let data = bytes::base64()
+    .process(data::MEANING_OF_LIFE_BASE64.as_bytes())
+    .unwrap();*/
+    //let mut cipher = bytes::decrypt_data(data);
     /*for num in schizo::reverse_numbers(&hex) {
         for idk in num.to_string().as_bytes().windows(16) {
             if let Ok(data) = process_string(idk, &mut cipher) {

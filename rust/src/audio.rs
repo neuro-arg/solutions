@@ -72,7 +72,7 @@ pub fn meaning_of_life() {
 pub fn filtered() {
     let src = "../../yt/right.wav";
     // let src = "f.wav";
-    let dst = "out.wav";
+    // let dst = "out.wav";
     let wav = hound::WavReader::open(src).unwrap();
     let spec = wav.spec();
     let samples = wav
@@ -85,7 +85,7 @@ pub fn filtered() {
         .collect();
     let mut fft = rustfft::FftPlanner::new();
     println!("{}", spec.sample_rate);
-    let planner = fft.plan_fft_forward((spec.sample_rate as usize));
+    let planner = fft.plan_fft_forward(spec.sample_rate as usize);
     comps.resize(
         (comps.len() + planner.len() - 1) / planner.len() * planner.len(),
         num::Complex::default(),
@@ -197,4 +197,37 @@ pub fn filtered() {
     }
     writer.flush().unwrap();
     out.finalize().unwrap();*/
+}
+
+pub fn geiger() {
+    let mut data: Vec<u32> = std::fs::read_to_string("geiger.txt")
+        .unwrap()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.parse().unwrap())
+        .collect();
+    let dst = "out.wav";
+    let spec = hound::WavSpec {
+        channels: 1,
+        sample_rate: 44100,
+        bits_per_sample: 16,
+        sample_format: hound::SampleFormat::Int,
+    };
+    let mut out = hound::WavWriter::create(dst, spec).unwrap();
+    let mut writer = out.get_i16_writer((data.last().unwrap() + 1) * 1470);
+    data.sort();
+    let mut data = data.as_slice();
+    for i in 0..=*data.last().unwrap() {
+        let mut w = false;
+        while !data.is_empty() && i >= *data.first().unwrap() {
+            w = true;
+            data = &data[1..];
+        }
+        let sample = if w { 32767i16 } else { 0i16 };
+        for x in 0..1470 {
+            writer.write_sample(if x % 2 == 1 { -sample } else { sample });
+        }
+    }
+    writer.flush().unwrap();
+    out.finalize().unwrap();
 }

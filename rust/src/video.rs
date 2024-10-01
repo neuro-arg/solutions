@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    io::Read,
     path::{Path, PathBuf},
     sync::mpsc,
 };
@@ -11,7 +10,7 @@ use ffmpeg::{
     media::Type,
     software::scaling::{Context, Flags},
 };
-use image::{GenericImage, GenericImageView, RgbImage};
+use image::{GenericImage, RgbImage};
 
 /*
 const FILTERED_W: u32 = 1920 - 391 * 2;
@@ -132,7 +131,7 @@ pub fn filtered_denoise_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
             std::thread::spawn(move || {
                 while let Ok((i, img)) = rx1.recv() {
                     println!("processing {i}");
-                    crate::images::filtered_denoise_img(image::open(img).unwrap())
+                    crate::images::candles_denoise_img(crate::images::filtered_open(img))
                         .save(dst.join(&format!("{i:04}.png")))
                         .unwrap();
                 }
@@ -356,23 +355,164 @@ pub fn xor_frames(dir: impl AsRef<Path>, out: impl AsRef<Path>) {
     }
 }
 
-pub fn rate_candles_frame(src: impl AsRef<Path>) -> Option<usize> {
+// deduces why i am so fucking stupid
+// 543
+// 543
+// 543
+// 543
+// 543
+// 543
+// aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+// 543
+// 543
+// xyz
+// abc
+// 572943
+// 5435435435435435435435435435435435435435435435435435435435435435435435435435 h
+pub fn why_candles_frame(src: impl AsRef<Path>, n: usize) {
+    let img = image::open(src).unwrap();
+    let frame = img.into_rgb8();
+    let mut img = RgbImage::new(frame.width(), frame.height() / n as u32);
+    let mut out = RgbImage::new(frame.width(), frame.height());
+    for ofs in 0..n {
+        for (dst, src) in img.rows_mut().zip(frame.rows().skip(ofs).step_by(n)) {
+            for (dst, src) in dst.zip(src) {
+                *dst = *src;
+            }
+        }
+        let mut prev = None::<&[u8]>;
+        // for each row, diff this row with prev row
+        for (rown, row) in img
+            .as_ref()
+            .chunks_exact(3 * img.width() as usize)
+            .enumerate()
+        {
+            if let Some(prev) = prev {
+                for (i, (a, b)) in prev.iter().zip(row.iter()).enumerate() {
+                    //sum += (*a ^ *b) as u64; // a.abs_diff(*b) as u64;
+                    // *out.rows_mut().nth(ofs * n + rown).unwrap().nth(i).unwrap()
+                    out.as_mut()[(ofs + rown * n) * img.width() as usize * 3 + i] = *a ^ *b;
+                }
+            }
+            prev = Some(row);
+        }
+    }
+    out.save("out.png").unwrap();
+}
+
+pub fn pattern_search() {
+    let data: Vec<(usize, i32)> = std::fs::read_to_string("patterns.txt")
+        .unwrap()
+        .split('\n')
+        .filter(|x| !x.is_empty())
+        .map(|x| x.split_once(' ').unwrap())
+        .map(|(a, b)| (a.parse().unwrap(), b.parse().unwrap()))
+        .collect();
+    let data = {
+        let mut x = vec![0i32; data.last().unwrap().0 + 1];
+        for (i, w) in data {
+            x[i] = w;
+        }
+        x
+    };
+    // let mut all_patterns = vec![];
+    let mut occupied = vec![false; data.len()];
+    for step in 0..data.len() {
+        for start in 0..step {
+            let mut cur = i32::MIN;
+            let mut cur_start = usize::MAX;
+            let mut len = 0;
+            let mut conf = 0;
+            let mut old = None;
+            let mut unconf_row = 0;
+            let dump = |occupied: &mut [bool],
+                        len: &mut i32,
+                        conf: &mut i32,
+                        cur: i32,
+                        cur_start: usize,
+                        i: usize| {
+                if ((*len > 4 && *conf >= ((*len * 2) / 3)) || (*len >= 4 && *conf == *len))
+                    && cur != i32::MIN
+                    && cur_start != usize::MAX
+                    && !occupied[cur_start - step]
+                    && data[cur_start - step] != 0
+                {
+                    println!(
+                        "{}..{} step {step} diff {cur} len {conf}/{len}",
+                        cur_start - step,
+                        i - step
+                    );
+                    if *len > 8 {
+                        for x in occupied
+                            .iter_mut()
+                            .skip(cur_start - step)
+                            .step_by(step)
+                            .take(*len as usize + 2)
+                        {
+                            *x = true;
+                        }
+                    }
+                }
+                *len = 0;
+                *conf = 0;
+            };
+            let mut last_i = 0;
+            let mut ignore = true;
+            for (i, x) in data.iter().copied().enumerate().skip(start).step_by(step) {
+                if let Some(old1) = old {
+                    if !ignore && (x == 0 || x - old1 == cur) {
+                        len += 1;
+                        if x - old1 == cur {
+                            conf += 1;
+                            unconf_row = 0;
+                        } else {
+                            unconf_row += 1;
+                        }
+                    } else {
+                        len -= unconf_row;
+                        dump(&mut occupied, &mut len, &mut conf, cur, cur_start, i);
+                        ignore = x == 0 || occupied[i];
+                        cur_start = i;
+                        cur = x - old1;
+                    }
+                    old = Some(old1 - cur);
+                }
+                if x != 0 {
+                    old = Some(x);
+                }
+                last_i = i;
+            }
+            dump(&mut occupied, &mut len, &mut conf, cur, cur_start, last_i);
+        }
+    }
+}
+
+pub fn rate_candles_frame(src: impl AsRef<Path>, dbg: bool) -> Option<u32> {
     let img = image::open(src).unwrap();
     let frame = img.into_rgb8();
     let mut cur = u64::MAX;
     let mut vals = Vec::new();
     for n in 1..256 {
-        let mut img = RgbImage::new(frame.width(), frame.height() / n as u32);
+        let mut img = RgbImage::new(frame.width(), (frame.height() + n - 1) / n);
         let mut sum = 0u64;
         for ofs in 0..n {
-            for (dst, src) in img.rows_mut().zip(frame.rows().skip(ofs).step_by(n)) {
+            let mut h = 0;
+            for (dst, src) in img
+                .rows_mut()
+                .zip(frame.rows().skip(ofs as usize).step_by(n as usize))
+            {
+                h += 1;
                 for (dst, src) in dst.zip(src) {
                     *dst = *src;
                 }
             }
             let mut prev = None::<&[u8]>;
             let mut sum0 = 0u64;
-            for row in img.as_ref().chunks_exact(3 * img.width() as usize) {
+            for row in img
+                .as_ref()
+                .chunks_exact(3 * img.width() as usize)
+                .take(h as usize)
+            {
                 if let Some(prev) = prev {
                     for (a, b) in prev.iter().zip(row.iter()) {
                         sum += (*a ^ *b) as u64; // a.abs_diff(*b) as u64;
@@ -380,13 +520,19 @@ pub fn rate_candles_frame(src: impl AsRef<Path>) -> Option<usize> {
                 }
                 prev = Some(row);
             }
-            sum0 /= img.height() as u64 - 1;
+            sum0 /= (h - 1) as u64;
             sum += sum0;
         }
         sum /= n as u64;
         if sum < cur {
             if n > 4 {
                 vals.push(((((cur as f64) / (sum as f64)) * 1000.0) as u64, n));
+            } else if n == 2 {
+                vals.push(((((cur as f64) / (sum as f64)) * 1000.0 / 3.) as u64, n));
+            } else if n == 4 {
+                vals.push(((((cur as f64) / (sum as f64)) * 1000.0 / 1.25) as u64, n));
+            } else if n == 3 {
+                vals.push(((((cur as f64) / (sum as f64)) * 1000.0 / 2.125) as u64, n));
             }
             /*if sum as f64 <= (cur as f64) / 1.4 {
                 println!("{n} {sum}!");
@@ -397,8 +543,11 @@ pub fn rate_candles_frame(src: impl AsRef<Path>) -> Option<usize> {
         }
     }
     vals.sort();
+    if dbg {
+        println!("{vals:?}");
+    }
     if let Some((a, b)) = vals.last() {
-        (*a > 1300).then_some(*b)
+        (*a <= 1300).then_some(*b)
     } else {
         None
     }
@@ -410,15 +559,13 @@ pub fn rate_candles_frames(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
         let src = src.as_ref().to_path_buf();
         let dst = dst.as_ref().to_path_buf();
         threads.push(std::thread::spawn(move || {
-            for i in 0..9999999 {
+            for i in 0..999999 {
                 let src1 = src.join(&format!("{:04}.png", i * 16 + j));
                 let Ok(_img) = image::open(&src1) else {
                     break;
                 };
-                if let Some(n) = rate_candles_frame(src1) {
-                    if n > 127 {
-                        candles_frames(&src, &dst, format!("{:04}", i * 16 + j), n);
-                    }
+                if let Some(n) = rate_candles_frame(src1, false) {
+                    candles_frames(&src, &dst, format!("{:04}", i * 16 + j), n as usize);
                 }
             }
         }));
