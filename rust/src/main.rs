@@ -1,5 +1,4 @@
-use crate::bytes::Cipher;
-
+#![allow(clippy::never_loop)]
 // two small combinator libraries for processing data and numbers
 pub mod audio;
 pub mod bytes;
@@ -295,21 +294,39 @@ fn main() {
     ffmpeg::init().unwrap();
     // video::brightness_graph2("f_psv", "brightness/psv1.png", 637, 476);
     // video::brightness_graph2("f_psv", "brightness/psv.png", 0, 0);
-    // video::brightness_graph2("f_study", "brightness/study.png", 0, 0);
+    // video::brightness_graph2("f_study", "brightness/study_denoise2.png", 0, 0);
     // video::brightness_graph2("f_helloworld", "brightness/hello.png", 0, 0);
     // video::brightness_graph2("f_unfiltered", "brightness/filtered.png", 100, 0);
     // video::brightness_graph2("f_mol", "brightness/mol.png", 0, 0);
     // video::rate_candles_frames("f_filtered", "f_fd1"); return;
     // images::filtered_denoise_img(image::open("f_fd/0134_023.png").unwrap()).save("out.png").unwrap(); return;
-    // image::imageops::rotate270(&images::candles_denoise_img(images::candles_open("f_candles2/2538.png"))).save("out.png").unwrap(); return;
+    // image::imageops::rotate270(&images::candles_denoise_img(images::candles_open("f_candles2/2696.png"))).save("out.png").unwrap(); return;
     // images::candles_denoise_img(images::filtered_open("f_filtered/0356.png")).save("out.png").unwrap(); return;
-    // video::filtered_denoise_dir("f_filtered", "f_unfiltered2"); return;
-    images::candles_denoise_graph("f_filtered").save("out.png").unwrap(); return;
+    video::filtered_denoise_dir("f_filtered", "f_unfiltered2"); return;
+    // video::candles_denoise_dir("f_candles", "f_uncandles2"); return;
+    // images::candles_denoise_graph("f_filtered").save("out.png").unwrap(); return;
+    // 12486-12865
+    // images::study_denoise_dir("f_study", "f_fstudy"); return;
+    // video::rate_candles_frame(image::open("mol.png").unwrap(), true);
+    // video::candles_cycles("f_mol", "f_unmol"); return;
+    /*for i in 0..1 {
+    images::meaning_of_life_reassemble_v2(i);
+    } return;
+    for i in 60..70 {
+        for j in 0..3 {
+            let j = j * 19;
+            // video::candles_frame("mol.png", format!("mol/{i:03}_{j:03}.png"), i, j);
+        }
+    }*/
     //video::pattern_search(); return;
-    //audio::geiger();
+    //audio::geiger(); return;
     if std::env::args().count() == 2 {
         video::rate_candles_frame(
-            format!("f_filtered/{}.png", std::env::args().nth(1).unwrap()),
+            image::open(format!(
+                "f_filtered/{}.png",
+                std::env::args().nth(1).unwrap()
+            ))
+            .unwrap(),
             true,
         );
     } else {
@@ -323,6 +340,30 @@ fn main() {
             std::env::args().nth(1).unwrap(),
             std::env::args().nth(2).unwrap().parse().unwrap(),
         );
+        let mut i = 0;
+        println!("tmp/{}_{i:03}.png", std::env::args().nth(1).unwrap());
+        /*while let Ok(img) = images::filtered_open(format!(
+            "tmp/{}_{i:03}.png",
+            std::env::args().nth(1).unwrap()
+        )) {
+            println!("{i}");
+            images::candles_denoise_img(img)
+                .save(format!(
+                    "tmp/{}u_{i:03}.png",
+                    std::env::args().nth(1).unwrap()
+                ))
+                .unwrap();
+            i += 1;
+        }*/
+        images::candles_denoise_img(
+            images::filtered_open(format!(
+                "f_filtered/{}.png",
+                std::env::args().nth(1).unwrap()
+            ))
+            .unwrap(),
+        )
+        .save(format!("tmp/{}u.png", std::env::args().nth(1).unwrap()))
+        .unwrap();
     }
     // cli tool 2
     /*let mut threads = Vec::new();

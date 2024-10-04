@@ -131,9 +131,39 @@ pub fn filtered_denoise_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
             std::thread::spawn(move || {
                 while let Ok((i, img)) = rx1.recv() {
                     println!("processing {i}");
-                    crate::images::candles_denoise_img(crate::images::filtered_open(img))
+                    crate::images::candles_denoise_img(crate::images::filtered_open(img).unwrap())
                         .save(dst.join(&format!("{i:04}.png")))
                         .unwrap();
+                }
+            }),
+        ));
+    }
+    while let Some(x) = Some(src.as_ref().join(&format!("{i:04}.png"))).filter(|x| x.is_file()) {
+        threads[i % threads.len()].0.send((i, x)).unwrap();
+        i += 1;
+    }
+    for (tx, thread) in threads {
+        drop(tx);
+        thread.join().unwrap();
+    }
+}
+
+pub fn candles_denoise_dir(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
+    let mut i = 2538usize;
+    let mut threads = vec![];
+    for _ in 0..16 {
+        let dst = dst.as_ref().to_owned();
+        let (tx1, rx1) = std::sync::mpsc::channel::<(usize, PathBuf)>();
+        threads.push((
+            tx1,
+            std::thread::spawn(move || {
+                while let Ok((i, img)) = rx1.recv() {
+                    println!("processing {i}");
+                    image::imageops::rotate270(&crate::images::candles_denoise_img(
+                        crate::images::candles_open(img),
+                    ))
+                    .save(dst.join(&format!("{i:04}.png")))
+                    .unwrap();
                 }
             }),
         ));
@@ -263,7 +293,7 @@ pub fn brightness_graph2(dir: impl AsRef<Path>, out: impl AsRef<Path>, start: us
                 let Ok(img) = image::open(dir.join(&format!("{:04}.png", i * 16 + j))) else {
                     break;
                 };
-                let frame = img.into_rgb8();
+                let frame = crate::images::study_denoise(img).into_rgb8();
                 if tx.send(frame).is_err() {
                     break;
                 }
@@ -487,13 +517,12 @@ pub fn pattern_search() {
     }
 }
 
-pub fn rate_candles_frame(src: impl AsRef<Path>, dbg: bool) -> Option<u32> {
-    let img = image::open(src).unwrap();
-    let frame = img.into_rgb8();
+pub fn rate_candles_frame(img: image::DynamicImage, dbg: bool) -> Option<u32> {
+    let frame = img.into_luma8();
     let mut cur = u64::MAX;
     let mut vals = Vec::new();
     for n in 1..256 {
-        let mut img = RgbImage::new(frame.width(), (frame.height() + n - 1) / n);
+        let mut img = image::GrayImage::new(frame.width(), (frame.height() + n - 1) / n);
         let mut sum = 0u64;
         for ofs in 0..n {
             let mut h = 0;
@@ -510,12 +539,14 @@ pub fn rate_candles_frame(src: impl AsRef<Path>, dbg: bool) -> Option<u32> {
             let mut sum0 = 0u64;
             for row in img
                 .as_ref()
-                .chunks_exact(3 * img.width() as usize)
+                .chunks_exact(img.width() as usize)
                 .take(h as usize)
             {
                 if let Some(prev) = prev {
                     for (a, b) in prev.iter().zip(row.iter()) {
-                        sum += (*a ^ *b) as u64; // a.abs_diff(*b) as u64;
+                        sum += (*a ^ *b) as u64
+                            // a.abs_diff(*b) as u64
+                            ;
                     }
                 }
                 prev = Some(row);
@@ -547,7 +578,8 @@ pub fn rate_candles_frame(src: impl AsRef<Path>, dbg: bool) -> Option<u32> {
         println!("{vals:?}");
     }
     if let Some((a, b)) = vals.last() {
-        (*a <= 1300).then_some(*b)
+        (*b >= 10 && *a >= 1300).then_some(*b)
+        // Some(*b)
     } else {
         None
     }
@@ -564,6 +596,7 @@ pub fn rate_candles_frames(src: impl AsRef<Path>, dst: impl AsRef<Path>) {
                 let Ok(_img) = image::open(&src1) else {
                     break;
                 };
+                let src1 = image::open(src1).unwrap();
                 if let Some(n) = rate_candles_frame(src1, false) {
                     candles_frames(&src, &dst, format!("{:04}", i * 16 + j), n as usize);
                 }
@@ -610,39 +643,49 @@ pub fn candles_frames(
 }
 
 pub fn candles_cycles(dir: impl AsRef<Path>, out: impl AsRef<Path>) {
-    let mut rxs = VecDeque::new();
-    for j in 1..=16 {
+    let mut threads = vec![];
+    const W: u32 = 3904; // 3904 might be fine too
+    for j in 0..16 {
         let dir = dir.as_ref().to_path_buf();
-        let (tx, rx) = mpsc::sync_channel(64);
-        rxs.push_back(rx);
-        std::thread::spawn(move || {
-            for i in 57..61 {
-                let Ok(img) = image::open(dir.join(&format!("{:04}.png", i * 16 + j))) else {
+        let out = out.as_ref().to_path_buf();
+        threads.push(std::thread::spawn(move || {
+            let x = "abcdefg";
+            let start = 26006;
+            for i in 0..26 {
+                let Ok(img) = image::open(dir.join(&format!("{:04}.png", i * 16 + j + start)))
+                else {
                     break;
                 };
-                let frame = img.into_rgb8();
-                if tx.send((i * 16 + j, frame)).is_err() {
-                    break;
+                // let w = img.width();
+                // let h = img.height();
+                let frame = image::DynamicImage::from(image::imageops::resize(
+                    &image::imageops::rotate90(&img),
+                    img.height(),
+                    W,
+                    image::imageops::FilterType::Triangle,
+                ))
+                .into_rgb8();
+                let i = i * 16 + j + 1;
+                for (o, c) in x.chars().enumerate() {
+                    let mut img = RgbImage::new(frame.width(), frame.height() / x.len() as u32);
+                    for (dst, src) in img.rows_mut().zip(frame.rows().skip(o).step_by(x.len())) {
+                        for (dst, src) in dst.zip(src) {
+                            *dst = *src;
+                        }
+                    }
+                    image::imageops::resize(
+                        &image::imageops::rotate270(&img),
+                        W,
+                        2160,
+                        image::imageops::FilterType::Nearest,
+                    )
+                    .save(out.join(format!("{c}{i:04}.png")))
+                    .unwrap();
                 }
             }
-        });
+        }));
     }
-    let x = "abcdefghijklmnopqrstuvwx";
-    while let Ok((i, frame)) = {
-        let rx = rxs.pop_front().unwrap();
-        let x = rx.recv();
-        rxs.push_back(rx);
-        x
-    } {
-        for (o, c) in x.chars().enumerate() {
-            let mut img = RgbImage::new(frame.width(), frame.height() / x.len() as u32);
-            for (dst, src) in img.rows_mut().zip(frame.rows().skip(o).step_by(x.len())) {
-                for (dst, src) in dst.zip(src) {
-                    *dst = *src;
-                }
-            }
-            img.save(out.as_ref().join(format!("{c}{i:04}.png")))
-                .unwrap();
-        }
+    for thread in threads {
+        thread.join().unwrap();
     }
 }
