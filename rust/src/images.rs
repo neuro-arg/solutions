@@ -274,9 +274,9 @@ impl<'a> CandlesPixelSource<'a> {
         let mut c = 0;
         if let Some(inter) = inter {
             // if this is in the right half, prefer rightmost coords
-            if x >= w / 2 {
+            /*if x >= w / 2 {
                 ms.reverse();
-            }
+            }*/
             // prefer non-intersecting pixels
             for x in ms.into_iter().flatten() {
                 if !inter.contains(x) {
@@ -308,9 +308,9 @@ impl<'a> CandlesPixelSource<'a> {
             // if this is in the left half, prefer rightmost coords
             // LR decomposed into two non-intersecting images is
             // lr lr, and it turns into r l after cropping
-            if x < w / 2 {
+            /*if x < w / 2 {
                 ms.reverse();
-            }
+            }*/
             for x in ms.into_iter().flatten() {
                 if let Some(p) = self.line.get(x as usize) {
                     ret = ret.saturating_add(*p);
