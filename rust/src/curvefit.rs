@@ -13,7 +13,7 @@ fn target_function_factory_by_ref(x: i32) -> impl Fn(&i32, &i32, &i32) -> i32 {
 
 /// The error metric to use; each point is then summed
 fn target_function_error(y_expected: &f64, y_actual: &f64) -> f64 {
-    ((*y_expected - *y_actual) as f64).powi(2)
+    (*y_expected - *y_actual).powi(2)
 }
 
 struct Shenanigans {
@@ -56,23 +56,17 @@ fn read_points_from_file(path: &str) -> Vec<(i32, i32)> {
         .collect_vec()
         .into_iter()
         .map(|line| {
-            (&line
+            *(&line
                 .split(|s| *s == b',')
                 .map(|s| String::from_utf8(s.to_vec()).expect("not a string, skill issue"))
                 .chunks(2))
                 .into_iter()
                 .map(|cols| cols.collect_vec())
                 .map(|cols| (cols[0].clone(), cols[1].clone()))
-                .map(|(x, y)| {
-                    (
-                        i32::from_str_radix(&x, 10).unwrap(),
-                        i32::from_str_radix(&y, 10).unwrap(),
-                    )
-                })
+                .map(|(x, y)| (x.parse::<i32>().unwrap(), y.parse::<i32>().unwrap()))
                 .collect::<Vec<_>>()
                 .first()
                 .expect("not in the correct format")
-                .clone()
         })
         .collect_vec()
 }
@@ -87,7 +81,7 @@ fn hamming_distance(a: &[i32], b: &[i32]) -> f32 {
         / a.len() as f32
 }
 
-fn curve_fit(points: &Vec<(i32, i32)>) -> (i32, i32, i32) {
+fn curve_fit(points: &[(i32, i32)]) -> (i32, i32, i32) {
     let x = points.iter().map(|(x, _)| *x as f64).collect_vec();
     let y = points.iter().map(|(_, y)| *y as f64).collect_vec();
 
@@ -130,8 +124,9 @@ fn lock_in_candidates(
 
     let ys = points.iter().map(|(_, y)| y).cloned().collect_vec();
 
-    (e_min..=e_max)
-        .array_chunks::<3>()
+    (e_min / 3..=e_max / 3)
+        .map(|x| x * 3 + e_min % 3)
+        .map(|x| [x, x + 1, x + 2])
         .par_bridge()
         .map(|vec_of_range| {
             let new_e_range = vec_of_range[0]..=vec_of_range[2];
@@ -190,7 +185,7 @@ pub fn curvefit(points_path: &str) -> CurveFitResult {
     let (best_ratio, (best_c, best_d, best_e, lowest_err)) = (0..points.len())
         .filter_map(|i| {
             let ratio = i as f32 / points.len() as f32;
-            if let Some(candidate) = lock_in_candidates(
+            lock_in_candidates(
                 points.clone(),
                 (close_c - 500, close_c + 500),
                 (close_d - 500, close_d + 500),
@@ -199,11 +194,7 @@ pub fn curvefit(points_path: &str) -> CurveFitResult {
             )
             .into_iter()
             .min_by(|(_, _, _, err_a), (_, _, _, err_b)| err_a.partial_cmp(err_b).unwrap())
-            {
-                Some((ratio, candidate))
-            } else {
-                None
-            }
+            .map(|candidate| (ratio, candidate))
         })
         .take(1)
         .collect_vec()[0];

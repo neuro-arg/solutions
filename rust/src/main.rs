@@ -1,5 +1,4 @@
 #![allow(clippy::never_loop)]
-#![feature(iter_array_chunks)]
 // two small combinator libraries for processing data and numbers
 pub mod audio;
 pub mod bytes;
