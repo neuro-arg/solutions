@@ -1,4 +1,5 @@
 #![allow(clippy::never_loop)]
+#![feature(iter_array_chunks)]
 // two small combinator libraries for processing data and numbers
 pub mod audio;
 pub mod bytes;
@@ -10,6 +11,7 @@ pub mod qr;
 pub mod schizo;
 #[cfg(feature = "video")]
 pub mod video;
+pub mod curvefit;
 
 pub struct Noop;
 
